@@ -12,11 +12,15 @@ export class AppController {
 
   @Get('status')
   getStatus() {
+    const port = process.env.PORT || 3000
+    const domain = process.env.DOMAIN || 'localhost'
     return {
       server: 'running',
-      service: 'OCPP Server',
+      service: 'OCPP CSMS',
+      version: '1.6J',
       timestamp: new Date().toISOString(),
-      websocket: 'ws://localhost:3000/ocpp',
+      websocket: `ws://${domain}:${port}/ocpp/{chargePointId}`,
+      contract: 'See CONTRACT.md',
     }
   }
 }

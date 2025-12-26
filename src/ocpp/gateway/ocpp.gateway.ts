@@ -82,11 +82,9 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
       })
 
       this.logger.log('WebSocket server initialized successfully')
-      this.logger.log('  Accepts: ws://localhost:3000/ocpp')
-      this.logger.log('  Accepts: ws://localhost:3000/ocpp/{chargerId}')
-      this.logger.log(
-        '  Accepts: ws://user:pass@localhost:3000/ocpp/{chargerId}',
-      )
+      this.logger.log('  Endpoint: /ocpp/{chargePointId}')
+      this.logger.log('  Protocol: OCPP 1.6J (JSON over WebSocket)')
+      this.logger.log('  Contract: chargePointId required in path')
     } catch (error) {
       this.logger.error(
         `Failed to initialize WebSocket server: ${error.message}`,
@@ -122,7 +120,7 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
     this.logger.log('OCPP Gateway destroyed')
   }
 
-  private handleConnection(client: OCPPWebSocket, request: any) {
+  private async handleConnection(client: OCPPWebSocket, request: any) {
     try {
       client.isAlive = true
       const requestUrl = request.url || ''
@@ -138,36 +136,40 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      // Try to get from query params as fallback
       if (!chargerId && parsedUrl.query && parsedUrl.query.chargerId) {
         chargerId = parsedUrl.query.chargerId as string
       }
 
-      // Check headers as fallback
       if (!chargerId && request.headers) {
         chargerId = (request.headers['x-charger-id'] as string) || null
       }
 
-      // Fallback to generating an ID
       if (!chargerId) {
-        chargerId = `charger-${uuidv4().substring(0, 8)}`
-        this.logger.warn(`No chargerId provided, generated: ${chargerId}`)
+        this.logger.error(
+          `Connection rejected: chargePointId required in path /ocpp/{chargePointId}`,
+        )
+        client.close(1008, 'chargePointId required in path')
+        return
       }
 
-      // Handle basic auth if present (we accept any credentials for now)
       if (parsedUrl.auth) {
         const [username] = parsedUrl.auth.split(':')
         this.logger.debug(`Connection with auth user: ${username}***`)
       }
 
+      this.logger.debug(
+        `Setting chargerId ${chargerId} for WebSocket connection`,
+      )
       client.chargerId = chargerId
       this.chargerSockets.set(chargerId, client)
-      this.chargerService.registerConnection(chargerId, chargerId)
+      const existCharger = await this.chargerService.getCharger(chargerId)
+      if (!existCharger) {
+        await this.chargerService.createCharger(chargerId)
+      } else {
+        await this.chargerService.updateChargerStatus(chargerId, 'online')
+      }
 
       this.logger.log(`Charger ${chargerId} connected`)
-      this.logger.debug(`Connection URL: ${requestUrl}`)
-
-      // Set up ping/pong handlers
       client.on('pong', () => {
         client.isAlive = true
       })
@@ -177,16 +179,14 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
         this.handleMessage(data, client)
       })
 
-      // Handle errors
       client.on('error', (error) => {
         this.logger.error(
           `WebSocket error for charger ${chargerId}: ${error.message}`,
         )
       })
 
-      // Handle close
-      client.on('close', () => {
-        this.handleDisconnect(client)
+      client.on('close', async () => {
+        await this.handleDisconnect(client)
       })
     } catch (error) {
       this.logger.error(
@@ -197,16 +197,23 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private handleDisconnect(client: OCPPWebSocket) {
+  private async handleDisconnect(client: OCPPWebSocket) {
     const chargerId = client.chargerId
     if (chargerId) {
       this.chargerSockets.delete(chargerId)
-      this.chargerService.unregisterConnection(chargerId)
+      await this.chargerService.unregisterConnection(chargerId)
       this.logger.log(`Charger ${chargerId} disconnected`)
+      const activeTransactions =
+        await this.transactionService.getActiveTransactionsByCharger(chargerId)
+      if (activeTransactions.length > 0) {
+        this.logger.log(
+          `Charger ${chargerId} disconnected with ${activeTransactions.length} active transaction(s) - will resume on reconnect`,
+        )
+      }
     }
   }
 
-  private handleMessage(data: WebSocket.Data, client: OCPPWebSocket) {
+  private async handleMessage(data: WebSocket.Data, client: OCPPWebSocket) {
     try {
       const chargerId = client.chargerId
       if (!chargerId) {
@@ -214,7 +221,6 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
         return
       }
 
-      // Parse JSON message
       let message: any
       try {
         const messageStr =
@@ -226,8 +232,9 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
         )
         return
       }
-      this.logger.log(message, 'client>>>>>>>>>>>>>>>>>>>>>>>>>', chargerId)
-      // Parse OCPP message format: [MessageType, MessageId, ActionName, Payload]
+      this.logger.debug(
+        `Received OCPP message from charger ${chargerId}: ${JSON.stringify(message)}`,
+      )
       if (!Array.isArray(message) || message.length < 3) {
         this.logger.error(
           `Invalid OCPP message format from charger ${chargerId}`,
@@ -237,21 +244,24 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
 
       const messageType = message[0]
       const messageId = message[1]
+      const action = message[2] as OCPPAction
+      const payload = message[3] || {}
 
       if (messageType === OCPPMessageType.CALL) {
-        // Incoming call from charger
-        const action = message[2] as OCPPAction
-        const payload = message[3] || {}
-
         this.logger.debug(`Received ${action} from charger ${chargerId}`)
 
-        this.handleIncomingCall(chargerId, messageId, action, payload, client)
+        await this.handleIncomingCall(
+          chargerId,
+          messageId,
+          action,
+          payload,
+          client,
+        )
       } else if (messageType === OCPPMessageType.CALLRESULT) {
-        // Response to our call
-        const payload = message[2]
-        this.handleCallResult(messageId, payload)
+        // Fixed: Use different variable name to avoid shadowing
+        const callResultPayload = message[2]
+        this.handleCallResult(messageId, callResultPayload)
       } else if (messageType === OCPPMessageType.CALLERROR) {
-        // Error response
         const errorPayload = message[2]
         this.handleCallError(messageId, errorPayload)
       }
@@ -260,210 +270,343 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private handleIncomingCall(
+  private readonly handlers: Partial<
+    Record<
+      OCPPAction,
+      (
+        chargerId: string,
+        messageId: string,
+        payload: any,
+        client: OCPPWebSocket,
+      ) => Promise<void> | void
+    >
+  > = {
+    [OCPPAction.BootNotification]: this.handleBootNotification.bind(this),
+    [OCPPAction.Authorize]: this.handleAuthorize.bind(this),
+    [OCPPAction.StartTransaction]: this.handleStartTransaction.bind(this),
+    [OCPPAction.StopTransaction]: this.handleStopTransaction.bind(this),
+    [OCPPAction.StatusNotification]: this.handleStatusNotification.bind(this),
+    [OCPPAction.MeterValues]: this.handleMeterValues.bind(this),
+    [OCPPAction.Heartbeat]: this.handleHeartbeat.bind(this),
+  }
+
+
+  private async handleIncomingCall(
     chargerId: string,
     messageId: string,
     action: OCPPAction,
     payload: any,
     client: OCPPWebSocket,
   ) {
-    switch (action) {
-      case OCPPAction.BootNotification:
-        this.handleBootNotification(chargerId, messageId, payload, client)
-        break
-      case OCPPAction.Authorize:
-        this.handleAuthorize(chargerId, messageId, payload, client)
-        break
-      case OCPPAction.StartTransaction:
-        this.handleStartTransaction(chargerId, messageId, payload, client)
-        break
-      case OCPPAction.StopTransaction:
-        this.handleStopTransaction(chargerId, messageId, payload, client)
-        break
-      case OCPPAction.StatusNotification:
-        this.handleStatusNotification(chargerId, messageId, payload, client)
-        break
-      case OCPPAction.MeterValues:
-        this.handleMeterValues(chargerId, messageId, payload, client)
-        break
-      case OCPPAction.Heartbeat:
-        this.handleHeartbeat(chargerId, messageId, payload, client)
-        break
-      default:
-        this.sendError(
-          client,
-          messageId,
-          OCPPErrorCode.NotImplemented,
-          `Action ${action} not implemented`,
-        )
+    const handler = this.handlers[action]
+    if (!handler) {
+      this.sendError(
+        client,
+        messageId,
+        OCPPErrorCode.NotImplemented,
+        `Action ${action} not implemented`,
+      )
+      return
     }
+    await handler(chargerId, messageId, payload, client)
   }
 
-  private handleBootNotification(
+  private async handleBootNotification(
     chargerId: string,
     messageId: string,
     payload: BootNotificationRequestDto,
     client: OCPPWebSocket,
   ) {
-    // Create or update charger
-    let charger = this.chargerService.getCharger(chargerId)
-    if (!charger) {
-      charger = this.chargerService.createCharger({
+    this.logger.debug(
+      `BootNotification received from charger ${chargerId}: ${JSON.stringify(payload)}`,
+    )
+
+    try {
+      const charger = await this.chargerService.getCharger(chargerId)
+      const isReconnect = !!charger
+
+      if (!isReconnect) {
+        await this.chargerService.createCharger(chargerId)
+        this.logger.log(`Charger ${chargerId} created`)
+      } else {
+        const activeTransactions =
+          await this.transactionService.getActiveTransactionsByCharger(
+            chargerId,
+          )
+        if (activeTransactions.length > 0) {
+          this.logger.log(
+            `Charger ${chargerId} has ${activeTransactions.length} active transaction(s)`,
+          )
+        }
+        this.logger.log(
+          `Charger ${chargerId} reconnected with ${charger.connectors?.length || 0} connector(s)`,
+        )
+      }
+
+      await this.chargerService.registerConnection({
         id: chargerId,
-        chargePointVendor: payload.chargePointVendor,
-        chargePointModel: payload.chargePointModel,
-        chargePointSerialNumber: payload.chargePointSerialNumber,
-        firmwareVersion: payload.firmwareVersion,
-        numberOfConnectors: 4, // Default from simulator
+        ...payload
       })
-    }
 
-    const response: BootNotificationResponseDto = {
-      status: 'Accepted',
-      currentTime: new Date().toISOString(),
-      interval: 300, // 5 minutes
-    }
 
-    this.sendCallResult(client, messageId, response)
-    this.logger.log(`Charger ${chargerId} boot notification accepted`)
+      const response: BootNotificationResponseDto = {
+        status: 'Accepted',
+        currentTime: new Date().toISOString(),
+        interval: 300, // 5 minutes
+      }
+
+      this.sendCallResult(client, messageId, response)
+      this.logger.log(`Charger ${chargerId} boot notification accepted`)
+    } catch (error) {
+      this.logger.error(
+        `Error handling BootNotification: ${error.message}`,
+        error.stack,
+      )
+      this.sendError(
+        client,
+        messageId,
+        OCPPErrorCode.InternalError,
+        'Failed to process BootNotification',
+      )
+    }
   }
 
-  private handleAuthorize(
+  private async handleAuthorize(
     chargerId: string,
     messageId: string,
     payload: AuthorizeRequestDto,
     client: OCPPWebSocket,
   ) {
-    const idTagInfo = this.authService.authorize(payload.idTag)
-    const response: AuthorizeResponseDto = {
-      idTagInfo,
-    }
+    try {
+      this.logger.debug(
+        `Handling Authorize request from charger ${chargerId} for idTag: ${payload?.idTag}`,
+      )
 
-    this.sendCallResult(client, messageId, response)
+      if (!payload || !payload.idTag) {
+        this.logger.error(
+          `Invalid Authorize payload from charger ${chargerId}: ${JSON.stringify(payload)}`,
+        )
+        this.sendError(
+          client,
+          messageId,
+          OCPPErrorCode.FormationViolation,
+          'idTag is required',
+        )
+        return
+      }
+
+      const idTagInfo = this.authService.authorize(payload.idTag)
+      const response: AuthorizeResponseDto = {
+        idTagInfo,
+      }
+
+      this.sendCallResult(client, messageId, response)
+      this.logger.debug(
+        `Authorize response sent for charger ${chargerId}, idTag: ${payload.idTag}, status: ${idTagInfo.status}`,
+      )
+    } catch (error) {
+      this.logger.error(
+        `Error handling Authorize: ${error.message}`,
+        error.stack,
+      )
+      this.sendError(
+        client,
+        messageId,
+        OCPPErrorCode.InternalError,
+        'Failed to process Authorize request',
+      )
+    }
   }
 
-  private handleStartTransaction(
+  private async handleStartTransaction(
     chargerId: string,
     messageId: string,
     payload: StartTransactionRequestDto,
     client: OCPPWebSocket,
   ) {
-    // Check authorization
-    const idTagInfo = this.authService.authorize(payload.idTag)
-    if (idTagInfo.status !== 'Accepted') {
-      const response: StartTransactionResponseDto = {
-        transactionId: 0,
-        idTagInfo,
+    try {
+      // Check authorization
+      const idTagInfo = this.authService.authorize(payload.idTag)
+      if (idTagInfo.status !== 'Accepted') {
+        const response: StartTransactionResponseDto = {
+          transactionId: 0,
+          idTagInfo,
+        }
+        this.sendCallResult(client, messageId, response)
+        return
       }
+
+      // Create transaction
+      const transaction = await this.transactionService.createTransaction({
+        chargerId,
+        connectorId: payload.connectorId,
+        idTag: payload.idTag,
+        meterStart: payload.meterStart,
+      })
+
+      const response: StartTransactionResponseDto = {
+        transactionId: transaction.id,
+        idTagInfo: {
+          status: 'Accepted',
+        },
+      }
+
       this.sendCallResult(client, messageId, response)
-      return
+      this.logger.log(
+        `Transaction ${transaction.id} started on charger ${chargerId} connector ${payload.connectorId}`,
+      )
+    } catch (error) {
+      this.logger.error(
+        `Error handling StartTransaction: ${error.message}`,
+        error.stack,
+      )
+      this.sendError(
+        client,
+        messageId,
+        OCPPErrorCode.InternalError,
+        'Failed to start transaction',
+      )
     }
-
-    // Create transaction
-    const transaction = this.transactionService.createTransaction({
-      chargerId,
-      connectorId: payload.connectorId,
-      idTag: payload.idTag,
-      meterStart: payload.meterStart,
-    })
-
-    const response: StartTransactionResponseDto = {
-      transactionId: transaction.id,
-      idTagInfo: {
-        status: 'Accepted',
-      },
-    }
-
-    this.sendCallResult(client, messageId, response)
-    this.logger.log(
-      `Transaction ${transaction.id} started on charger ${chargerId} connector ${payload.connectorId}`,
-    )
   }
 
-  private handleStopTransaction(
+  private async handleStopTransaction(
     chargerId: string,
     messageId: string,
     payload: StopTransactionRequestDto,
     client: OCPPWebSocket,
   ) {
-    const transaction = this.transactionService.stopTransaction(
-      payload.transactionId,
-      parseFloat(payload.meterStop),
-      payload.reason,
-    )
+    try {
+      const transaction = await this.transactionService.stopTransaction(
+        payload.transactionId,
+        parseFloat(payload.meterStop),
+        payload.reason,
+      )
 
-    const response: StopTransactionResponseDto = {
-      idTagInfo: {
-        status: 'Accepted',
-      },
-    }
+      const response: StopTransactionResponseDto = {
+        idTagInfo: {
+          status: 'Accepted',
+        },
+      }
 
-    this.sendCallResult(client, messageId, response)
-    if (transaction) {
-      this.logger.log(
-        `Transaction ${payload.transactionId} stopped. Energy: ${transaction.energyConsumed?.toFixed(2)} kWh`,
+      this.sendCallResult(client, messageId, response)
+      if (transaction) {
+        this.logger.log(
+          `Transaction ${payload.transactionId} stopped. Energy: ${transaction.energyConsumed?.toFixed(2)} kWh`,
+        )
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error handling StopTransaction: ${error.message}`,
+        error.stack,
+      )
+      this.sendError(
+        client,
+        messageId,
+        OCPPErrorCode.InternalError,
+        'Failed to stop transaction',
       )
     }
   }
 
-  private handleStatusNotification(
+  private async handleStatusNotification(
     chargerId: string,
     messageId: string,
     payload: StatusNotificationRequestDto,
     client: OCPPWebSocket,
   ) {
-    this.chargerService.updateConnectorStatus(
-      chargerId,
-      payload.connectorId,
-      payload.status as any,
-      payload.errorCode as any,
-      payload.info,
-    )
+    console.log(payload, "handleStatusNotification");
+    
+    try {
+      await this.chargerService.updateConnectorStatus(
+        chargerId,
+        payload.connectorId,
+        payload.status as any,
+        payload.errorCode as any,
+        payload.info,
+      )
 
-    // StatusNotification has empty response
-    this.sendCallResult(client, messageId, {})
+      // StatusNotification has empty response
+      this.sendCallResult(client, messageId, {})
+    } catch (error) {
+      this.logger.error(
+        `Error handling StatusNotification: ${error.message}`,
+        error.stack,
+      )
+      this.sendError(
+        client,
+        messageId,
+        OCPPErrorCode.InternalError,
+        'Failed to update connector status',
+      )
+    }
   }
 
-  private handleMeterValues(
+  private async handleMeterValues(
     chargerId: string,
     messageId: string,
     payload: MeterValuesRequestDto,
     client: OCPPWebSocket,
   ) {
-    if (payload.transactionId) {
-      // Store meter values
-      payload.meterValue.forEach((mv) => {
-        this.transactionService.addMeterValue({
-          transactionId: payload.transactionId!,
-          timestamp: new Date(mv.timestamp),
-          connectorId: payload.connectorId,
-          sampledValues: mv.sampledValue.map((sv) => ({
-            value: sv.value,
-            measurand: sv.measurand || '',
-            unit: sv.unit,
-            context: sv.context,
-          })),
-        })
-      })
-    }
+    try {
+      if (payload.transactionId) {
+        // Store meter values
+        for (const mv of payload.meterValue) {
+          await this.transactionService.addMeterValue({
+            transactionId: payload.transactionId!,
+            timestamp: new Date(mv.timestamp),
+            connectorId: payload.connectorId,
+            sampledValues: mv.sampledValue.map((sv) => ({
+              value: sv.value,
+              measurand: sv.measurand || '',
+              unit: sv.unit,
+              context: sv.context,
+            })),
+          })
+        }
+      }
 
-    // MeterValues has empty response
-    this.sendCallResult(client, messageId, {})
+      // MeterValues has empty response
+      this.sendCallResult(client, messageId, {})
+    } catch (error) {
+      this.logger.error(
+        `Error handling MeterValues: ${error.message}`,
+        error.stack,
+      )
+      this.sendError(
+        client,
+        messageId,
+        OCPPErrorCode.InternalError,
+        'Failed to store meter values',
+      )
+    }
   }
 
-  private handleHeartbeat(
+  private async handleHeartbeat(
     chargerId: string,
     messageId: string,
     payload: any,
     client: OCPPWebSocket,
   ) {
-    this.chargerService.updateLastHeartbeat(chargerId)
+    try {
+      await this.chargerService.updateLastHeartbeat(chargerId)
 
-    const response: HeartbeatResponseDto = {
-      currentTime: new Date().toISOString(),
+      const response: HeartbeatResponseDto = {
+        currentTime: new Date().toISOString(),
+      }
+
+      this.sendCallResult(client, messageId, response)
+    } catch (error) {
+      this.logger.error(
+        `Error handling Heartbeat: ${error.message}`,
+        error.stack,
+      )
+      this.sendError(
+        client,
+        messageId,
+        OCPPErrorCode.InternalError,
+        'Failed to update heartbeat',
+      )
     }
-
-    this.sendCallResult(client, messageId, response)
   }
 
   private sendCallResult(client: WebSocket, messageId: string, payload: any) {

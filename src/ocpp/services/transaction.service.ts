@@ -1,108 +1,172 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Transaction, MeterValue } from '../interfaces/transaction.interface';
+import { Injectable, Logger } from '@nestjs/common'
+import { InjectModel } from '@nestjs/mongoose'
+import { Model } from 'mongoose'
+import {
+  Transaction,
+  TransactionDocument,
+  MeterValue,
+  MeterValueDocument,
+} from '../schemas/transaction.schema'
 
 @Injectable()
 export class TransactionService {
-  private readonly logger = new Logger(TransactionService.name);
-  private transactions: Map<number, Transaction> = new Map();
-  private meterValues: MeterValue[] = [];
-  private nextTransactionId = 1;
+  private readonly logger = new Logger(TransactionService.name)
+  private nextTransactionId = 1
 
-  createTransaction(data: {
-    chargerId: string;
-    connectorId: number;
-    idTag: string;
-    meterStart: number;
-  }): Transaction {
-    const transaction: Transaction = {
-      id: this.nextTransactionId++,
+  constructor(
+    @InjectModel(Transaction.name)
+    private transactionModel: Model<TransactionDocument>,
+    @InjectModel(MeterValue.name)
+    private meterValueModel: Model<MeterValueDocument>,
+  ) {
+    this.initializeTransactionId()
+  }
+
+  private async initializeTransactionId(): Promise<void> {
+    const lastTransaction = await this.transactionModel
+      .findOne()
+      .sort({ id: -1 })
+      .lean()
+    if (lastTransaction) {
+      this.nextTransactionId = lastTransaction.id + 1
+      this.logger.log(
+        `Initialized transaction ID counter: ${this.nextTransactionId}`,
+      )
+    }
+  }
+
+  async createTransaction(data: {
+    chargerId: string
+    connectorId: number
+    idTag: string
+    meterStart: number
+  }): Promise<Transaction> {
+    const transactionId = this.nextTransactionId++
+
+    const transaction = new this.transactionModel({
+      id: transactionId,
       chargerId: data.chargerId,
       connectorId: data.connectorId,
       idTag: data.idTag,
       meterStart: data.meterStart,
       startTime: new Date(),
       status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    })
 
-    this.transactions.set(transaction.id, transaction);
+    await transaction.save()
     this.logger.log(
-      `Transaction ${transaction.id} started on charger ${data.chargerId} connector ${data.connectorId}`,
-    );
-    return transaction;
+      `Transaction ${transactionId} started on charger ${data.chargerId} connector ${data.connectorId}`,
+    )
+    return transaction.toObject()
   }
 
-  stopTransaction(
+  async stopTransaction(
     transactionId: number,
     meterStop: number,
     reason?: Transaction['stopReason'],
-  ): Transaction | undefined {
-    const transaction = this.transactions.get(transactionId);
+  ): Promise<Transaction | null> {
+    const transaction = await this.transactionModel.findOne({
+      id: transactionId,
+    })
+
     if (transaction) {
-      transaction.meterStop = meterStop;
-      transaction.stopTime = new Date();
-      transaction.stopReason = reason;
-      transaction.status = 'completed';
-      transaction.updatedAt = new Date();
+      transaction.meterStop = meterStop
+      transaction.stopTime = new Date()
+      transaction.stopReason = reason
+      transaction.status = 'completed'
 
       // Calculate energy consumed
-      transaction.energyConsumed =
-        (meterStop - transaction.meterStart) / 1000; // Convert Wh to kWh
+      transaction.energyConsumed = (meterStop - transaction.meterStart) / 1000 // Convert Wh to kWh
+
+      // updatedAt is automatically updated by Mongoose timestamps: true
+      await transaction.save()
 
       this.logger.log(
         `Transaction ${transactionId} stopped. Energy: ${transaction.energyConsumed?.toFixed(2)} kWh`,
-      );
-      return transaction;
+      )
+      return transaction.toObject()
     }
-    return undefined;
+    return null
   }
 
-  getTransaction(transactionId: number): Transaction | undefined {
-    return this.transactions.get(transactionId);
+  async getTransaction(transactionId: number): Promise<Transaction | null> {
+    const transaction = await this.transactionModel
+      .findOne({ id: transactionId })
+      .lean()
+    return transaction
   }
 
-  getActiveTransaction(
+  async getActiveTransaction(
     chargerId: string,
     connectorId: number,
-  ): Transaction | undefined {
-    return Array.from(this.transactions.values()).find(
-      (t) =>
-        t.chargerId === chargerId &&
-        t.connectorId === connectorId &&
-        t.status === 'active',
-    );
+  ): Promise<Transaction | null> {
+    const transaction = await this.transactionModel
+      .findOne({
+        chargerId,
+        connectorId,
+        status: 'active',
+      })
+      .lean()
+    return transaction
   }
 
-  getAllTransactions(): Transaction[] {
-    return Array.from(this.transactions.values());
+  async getActiveTransactionsByCharger(
+    chargerId: string,
+  ): Promise<Transaction[]> {
+    return this.transactionModel
+      .find({
+        chargerId,
+        status: 'active',
+      })
+      .lean()
   }
 
-  getTransactionsByCharger(chargerId: string): Transaction[] {
-    return Array.from(this.transactions.values()).filter(
-      (t) => t.chargerId === chargerId,
-    );
+  async getAllTransactions(): Promise<Transaction[]> {
+    return this.transactionModel.find().sort({ startTime: -1 }).lean()
   }
 
-  addMeterValue(meterValue: MeterValue): void {
-    this.meterValues.push(meterValue);
+  async getTransactionsByCharger(chargerId: string): Promise<Transaction[]> {
+    return this.transactionModel
+      .find({ chargerId })
+      .sort({ startTime: -1 })
+      .lean()
+  }
+
+  async addMeterValue(meterValue: {
+    transactionId: number
+    timestamp: Date
+    connectorId: number
+    sampledValues: {
+      value: string
+      measurand: string
+      unit?: string
+      context?: string
+    }[]
+  }): Promise<void> {
+    const mv = new this.meterValueModel(meterValue)
+    await mv.save()
 
     // Update transaction with latest meter value
-    const transaction = this.transactions.get(meterValue.transactionId);
+    const transaction = await this.transactionModel.findOne({
+      id: meterValue.transactionId,
+    })
+
     if (transaction && meterValue.sampledValues.length > 0) {
       const energyValue = meterValue.sampledValues.find(
         (sv) => sv.measurand === 'Energy.Active.Import.Register',
-      );
+      )
       if (energyValue) {
-        const energyWh = parseFloat(energyValue.value);
-        transaction.energyConsumed = (energyWh - transaction.meterStart) / 1000;
-        transaction.updatedAt = new Date();
+        const energyWh = parseFloat(energyValue.value)
+        transaction.energyConsumed = (energyWh - transaction.meterStart) / 1000
+        await transaction.save()
       }
     }
   }
 
-  getMeterValues(transactionId: number): MeterValue[] {
-    return this.meterValues.filter((mv) => mv.transactionId === transactionId);
+  async getMeterValues(transactionId: number): Promise<MeterValue[]> {
+    return this.meterValueModel
+      .find({ transactionId })
+      .sort({ timestamp: 1 })
+      .lean()
   }
 }
-
