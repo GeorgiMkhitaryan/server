@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { MongooseModule } from '@nestjs/mongoose'
 import { OCPPGateway } from './gateway/ocpp.gateway'
 import { ChargerService } from './services/charger.service'
+import { ConnectorService } from './services/connector.service'
 import { TransactionService } from './services/transaction.service'
 import { AuthService } from './services/auth.service'
 import { ChargersController } from './controllers/chargers.controller'
@@ -18,18 +19,32 @@ import {
   ChargerConnection,
   ChargerConnectionSchema,
 } from './schemas/connection.schema'
+import { Connector, ConnectorSchema } from './schemas/connector.schema'
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Charger.name, schema: ChargerSchema },
+      { name: Connector.name, schema: ConnectorSchema },
       { name: Transaction.name, schema: TransactionSchema },
       { name: MeterValue.name, schema: MeterValueSchema },
       { name: ChargerConnection.name, schema: ChargerConnectionSchema },
     ]),
   ],
-  providers: [OCPPGateway, ChargerService, TransactionService, AuthService],
+  providers: [
+    OCPPGateway,
+    ChargerService,
+    ConnectorService,
+    TransactionService,
+    AuthService,
+  ],
   controllers: [ChargersController, TransactionsController, HealthController],
-  exports: [OCPPGateway, ChargerService, TransactionService, AuthService],
+  exports: [
+    OCPPGateway,
+    ChargerService,
+    ConnectorService,
+    TransactionService,
+    AuthService,
+  ],
 })
 export class OCPPModule {}

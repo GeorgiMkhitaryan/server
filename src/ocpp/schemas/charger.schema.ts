@@ -1,29 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
-import { Document } from 'mongoose'
-import { ConnectorStatus, OCPPErrorCode } from '../dto/status-notification.dto'
+import { Document, Types } from 'mongoose'
 
 export type ChargerDocument = Charger & Document
-
-@Schema({ timestamps: true })
-export class Connector {
-  @Prop({ required: false })
-  id: number
-
-  @Prop({ required: true, enum: Object.values(ConnectorStatus) })
-  status: ConnectorStatus
-
-  @Prop({ required: true, enum: Object.values(OCPPErrorCode) })
-  errorCode: OCPPErrorCode
-
-  @Prop()
-  info?: string
-
-  @Prop()
-  lastStatusUpdate?: Date
-}
-
-const ConnectorSchema = SchemaFactory.createForClass(Connector)
-
 @Schema({ timestamps: true })
 export class Charger {
   @Prop({ required: true, unique: true, index: true })
@@ -33,45 +11,28 @@ export class Charger {
   status: 'online' | 'offline'
 
   @Prop()
-  chargePointVendor?: string
-
-  @Prop()
-  chargePointModel?: string
-
-  @Prop()
-  chargePointSerialNumber?: string
-
-  @Prop()
-  chargeBoxSerialNumber?: string
-
-  @Prop()
-  firmwareVersion?: string
-
-  @Prop()
-  iccid?: string
-
-  @Prop()
-  imsi?: string
-
-  @Prop()
-  meterSerialNumber?: string
-
-  @Prop()
-  meterType?: string
-
-  @Prop()
   lastHeartbeat?: Date
 
-  @Prop({ type: [ConnectorSchema], default: [] })
-  connectors: Connector[]
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Connector' }], default: [] })
+  connectors: Types.ObjectId[]
 
-  @Prop({ type: Map, of: String, default: {} })
-  configuration?: Record<string, string>
+  @Prop({ type: Object, default: {} })
+  configuration?: {
+    chargePointVendor?: string
+    chargePointModel?: string
+    chargePointSerialNumber?: string
+    chargeBoxSerialNumber?: string
+    firmwareVersion?: string
+    iccid?: string
+    imsi?: string
+    meterSerialNumber?: string
+    meterType?: string
+  }
 }
+
 
 export const ChargerSchema = SchemaFactory.createForClass(Charger)
 
-// Indexes for performance
 ChargerSchema.index({ id: 1 })
 ChargerSchema.index({ status: 1 })
 ChargerSchema.index({ lastHeartbeat: 1 })

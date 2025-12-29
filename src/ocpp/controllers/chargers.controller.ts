@@ -6,12 +6,15 @@ import {
   Body,
   NotFoundException,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common'
 import { ChargerService } from '../services/charger.service'
 import { TransactionService } from '../services/transaction.service'
 import { OCPPGateway } from '../gateway/ocpp.gateway'
 import { OCPPAction } from '../interfaces/ocpp-message.interface'
+import { AuthGuard } from '../Guards/AuthGuard'
 
+@UseGuards(AuthGuard)
 @Controller('chargers')
 export class ChargersController {
   constructor(
@@ -44,7 +47,7 @@ export class ChargersController {
       throw new NotFoundException(`Charger ${chargerId} not found`)
     }
 
-    const connector = charger.connectors.find((c) => c.id === connectorId)
+    const connector = charger.connectors
     if (!connector) {
       throw new NotFoundException(
         `Connector ${connectorId} not found on charger ${chargerId}`,
@@ -192,5 +195,4 @@ export class ChargersController {
       )
     }
   }
-
 }

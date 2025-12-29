@@ -1,13 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
-import { Charger, ChargerDocument, Connector } from '../schemas/charger.schema'
+import { Charger, ChargerDocument } from '../schemas/charger.schema'
+import { Connector, ConnectorDocument } from '../schemas/connector.schema'
+import { ConnectorStatus } from '../dto/status-notification.dto'
 import {
   ChargerConnection,
   ChargerConnectionDocument,
 } from '../schemas/connection.schema'
-import { ConnectorStatus, OCPPErrorCode } from '../dto/status-notification.dto'
-import { OCPP_CONSTANTS } from '../constants/ocpp.constants'
 
 @Injectable()
 export class ChargerService {
@@ -15,6 +15,7 @@ export class ChargerService {
 
   constructor(
     @InjectModel(Charger.name) private chargerModel: Model<ChargerDocument>,
+    @InjectModel(Connector.name) private connectorModel: Model<ConnectorDocument>,
     @InjectModel(ChargerConnection.name)
     private connectionModel: Model<ChargerConnectionDocument>,
   ) {}
@@ -22,7 +23,8 @@ export class ChargerService {
   async createCharger(id): Promise<Charger> {
     const charger = new this.chargerModel({
       id: id,
-      status: 'offline',
+      status: 'online',
+      lastHeartbeat: new Date(),
       configuration: {},
     })
 
@@ -44,46 +46,20 @@ export class ChargerService {
     id: string,
     status: 'online' | 'offline',
   ): Promise<void> {
+    const charger = await this.chargerModel.findOne({ id })
+    if (!charger) return
+
     const update: any = { status, updatedAt: new Date() }
     if (status === 'online') {
       update.lastHeartbeat = new Date()
     }
     await this.chargerModel.updateOne({ id }, { $set: update })
-  }
 
-  async updateConnectorStatus(
-    chargerId: string,
-    connectorId: number,
-    status: ConnectorStatus,
-    errorCode: OCPPErrorCode,
-    info?: string,
-  ): Promise<void> {
-    const charger = await this.chargerModel.findOne({ id: chargerId })
-    if (charger) {
-      const connector = charger.connectors.find((c) => c.id === connectorId)
-      if (connector) {
-        const previousStatus = connector.status
-        connector.status = status
-        connector.errorCode = errorCode
-        connector.info = info
-        connector.lastStatusUpdate = new Date()
-
-        await charger.save()
-
-        this.logger.log(
-          `Charger ${chargerId} connector ${connectorId}: ${previousStatus} → ${status}`,
-        )
-
-        if (
-          previousStatus === ConnectorStatus.Faulted &&
-          status === ConnectorStatus.Available
-        ) {
-          this.logger.log(
-            `Charger ${chargerId} connector ${connectorId} recovered from fault`,
-          )
-        }
-      }
-    }
+    const connectorStatus = status === 'offline' ? ConnectorStatus.Unavailable : ConnectorStatus.Available
+    await this.connectorModel.updateMany(
+      { chargerId: charger._id },
+      { $set: { status: connectorStatus, lastStatusUpdate: new Date() } },
+    )
   }
 
   async updateLastHeartbeat(chargerId: string): Promise<void> {
@@ -93,17 +69,12 @@ export class ChargerService {
         $set: {
           lastHeartbeat: new Date(),
           status: 'online',
-          updatedAt: new Date(),
         },
       },
     )
   }
 
-  async registerConnection({ id, ...data }): Promise<void> {
-    // Get existing charger to preserve connector count if reconnecting
-    const existingCharger = await this.chargerModel.findOne({ id })
-    console.log(data, 'data')
-
+  async addConfigurations({ id, ...data }): Promise<void> {
     await this.chargerModel.findOneAndUpdate(
       { id },
       {
@@ -139,5 +110,4 @@ export class ChargerService {
     const connection = await this.connectionModel.findOne({ chargerId }).lean()
     return connection?.socketId
   }
-
 }

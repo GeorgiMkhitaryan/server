@@ -30,6 +30,7 @@ import { StatusNotificationRequestDto } from '../dto/status-notification.dto'
 import { MeterValuesRequestDto } from '../dto/meter-values.dto'
 import { HeartbeatResponseDto } from '../dto/heartbeat.dto'
 import { v4 as uuidv4 } from 'uuid'
+import { ConnectorService } from '../services/connector.service'
 
 interface OCPPWebSocket extends WebSocket {
   chargerId?: string
@@ -46,6 +47,7 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private chargerService: ChargerService,
+    private connectorService: ConnectorService,
     private transactionService: TransactionService,
     private authService: AuthService,
   ) {}
@@ -290,7 +292,6 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
     [OCPPAction.Heartbeat]: this.handleHeartbeat.bind(this),
   }
 
-
   private async handleIncomingCall(
     chargerId: string,
     messageId: string,
@@ -342,12 +343,10 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
           `Charger ${chargerId} reconnected with ${charger.connectors?.length || 0} connector(s)`,
         )
       }
-
-      await this.chargerService.registerConnection({
+      await this.chargerService.addConfigurations({
         id: chargerId,
-        ...payload
+        ...payload,
       })
-
 
       const response: BootNotificationResponseDto = {
         status: 'Accepted',
@@ -514,17 +513,10 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
     payload: StatusNotificationRequestDto,
     client: OCPPWebSocket,
   ) {
-    console.log(payload, "handleStatusNotification");
-    
-    try {
-      await this.chargerService.updateConnectorStatus(
-        chargerId,
-        payload.connectorId,
-        payload.status as any,
-        payload.errorCode as any,
-        payload.info,
-      )
+    console.log(payload, 'handleStatusNotification')
+    this.connectorService.addConnector(chargerId, payload)
 
+    try {
       // StatusNotification has empty response
       this.sendCallResult(client, messageId, {})
     } catch (error) {
@@ -669,7 +661,6 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
       }
 
       const messageId = uuidv4()
-      // OCPP 1.6J format: [MessageType, MessageId, ActionName, Payload]
       const message = [OCPPMessageType.CALL, messageId, action, payload]
 
       this.pendingCallbacks.set(messageId, (response) => {
