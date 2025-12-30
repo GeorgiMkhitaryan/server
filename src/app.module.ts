@@ -7,7 +7,7 @@ import { OCPPModule } from './ocpp/ocpp.module'
 @Module({
   imports: [
     MongooseModule.forRoot(
-      process.env.MONGODB_URI || 'mongodb://localhost:27017/ocpp',
+      'mongodb://localhost:27017/ocpp',
       {
         retryWrites: true,
         w: 'majority',

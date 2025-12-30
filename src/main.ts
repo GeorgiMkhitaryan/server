@@ -45,8 +45,7 @@ async function bootstrap() {
   const ocppGateway = app.get(OCPPGateway)
   ocppGateway.initializeWebSocketServer(httpServer)
 
-  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ocpp'
-  const mongoHost = mongoUri.split('@')[1]?.split('/')[0] || 'localhost:27017'
+  const mongoUri = process.env.MONGODB_URI 
 
   console.log('')
   console.log('═══════════════════════════════════════════════════════')
@@ -55,7 +54,7 @@ async function bootstrap() {
   console.log(`  HTTP Server:    http://${DOMAIN}:${PORT}`)
   console.log(`  WebSocket:      ws://${DOMAIN}:${PORT}/ocpp/{chargePointId}`)
   console.log(`  WebSocket SSL:  wss://${DOMAIN}/ocpp/{chargePointId}`)
-  console.log(`  MongoDB:        ${mongoHost}`)
+  console.log(`  MongoDB:        ${mongoUri}`)
   console.log('═══════════════════════════════════════════════════════')
   console.log('  Contract: See CONTRACT.md')
   console.log('  OCPP Version: 1.6J (JSON over WebSocket)')
