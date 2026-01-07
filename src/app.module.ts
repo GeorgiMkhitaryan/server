@@ -4,6 +4,8 @@ import { AppController } from './app.controller'
 import { AppService } from './app.service'
 import { OCPPModule } from './ocpp/ocpp.module'
 import { WsModule } from './wsClient/wsClient.module'
+import { UsersModule } from './users/users.module'
+import { CarsModule } from './cars/cars.module'
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { WsModule } from './wsClient/wsClient.module'
     ),
     OCPPModule,
     WsModule,
+    UsersModule,
+    CarsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

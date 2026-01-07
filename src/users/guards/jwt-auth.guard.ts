@@ -1,0 +1,60 @@
+import {
+  Injectable,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common'
+import { AuthGuard } from '@nestjs/passport'
+import { Reflector } from '@nestjs/core'
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator'
+
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  constructor(private reflector: Reflector) {
+    super()
+  }
+
+  canActivate(context: ExecutionContext) {
+    // Check if route is marked as public
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ])
+
+    if (isPublic) {
+      return true
+    }
+
+    // Check Authorization header format
+    const request = context.switchToHttp().getRequest()
+    const authHeader = request.headers?.authorization
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header is required')
+    }
+
+    if (!authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException(
+        'Invalid authorization header format. Expected: "Bearer <token>"',
+      )
+    }
+
+    return super.canActivate(context)
+  }
+
+  handleRequest(err: any, user: any, info: any) {
+    if (err) {
+      throw err
+    }
+
+    if (!user) {
+      if (info?.message) {
+        throw new UnauthorizedException(
+          `Token validation failed: ${info.message}`,
+        )
+      }
+      throw new UnauthorizedException('Invalid or expired token')
+    }
+
+    return user
+  }
+}
