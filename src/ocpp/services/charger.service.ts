@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
 import { Charger, ChargerDocument } from '../schemas/charger.schema'
@@ -8,19 +8,23 @@ import {
   ChargerConnection,
   ChargerConnectionDocument,
 } from '../schemas/connection.schema'
+import { WsClientGateway } from 'src/wsClient/ws.client'
 
 @Injectable()
 export class ChargerService {
   private readonly logger = new Logger(ChargerService.name)
 
   constructor(
+    @Inject(forwardRef(() => WsClientGateway))
+    private wsClient: WsClientGateway,
     @InjectModel(Charger.name) private chargerModel: Model<ChargerDocument>,
-    @InjectModel(Connector.name) private connectorModel: Model<ConnectorDocument>,
+    @InjectModel(Connector.name)
+    private connectorModel: Model<ConnectorDocument>,
     @InjectModel(ChargerConnection.name)
     private connectionModel: Model<ChargerConnectionDocument>,
   ) {}
 
-  async createCharger(id): Promise<Charger> {
+  async createCharger(id: string): Promise<Charger> {
     const charger = new this.chargerModel({
       id: id,
       status: 'online',
@@ -47,15 +51,27 @@ export class ChargerService {
     status: 'online' | 'offline',
   ): Promise<void> {
     const charger = await this.chargerModel.findOne({ id })
-    if (!charger) return
+    if (!charger) {
+      this.logger.warn(`Charger ${id} not found when updating status`)
+      return
+    }
 
-    const update: any = { status, updatedAt: new Date() }
+    const update: Partial<Charger> & {
+      updatedAt?: Date
+      lastHeartbeat?: Date
+    } = {
+      status,
+      updatedAt: new Date(),
+    }
     if (status === 'online') {
       update.lastHeartbeat = new Date()
     }
     await this.chargerModel.updateOne({ id }, { $set: update })
 
-    const connectorStatus = status === 'offline' ? ConnectorStatus.Unavailable : ConnectorStatus.Available
+    const connectorStatus =
+      status === 'offline'
+        ? ConnectorStatus.Unavailable
+        : ConnectorStatus.Available
     await this.connectorModel.updateMany(
       { chargerId: charger._id },
       { $set: { status: connectorStatus, lastStatusUpdate: new Date() } },
@@ -74,25 +90,49 @@ export class ChargerService {
     )
   }
 
-  async addConfigurations({ id, ...data }): Promise<void> {
-    await this.chargerModel.findOneAndUpdate(
-      { id },
-      {
-        $set: {
-          configuration: {
-            ...data,
+  async addConfigurations({
+    id,
+    ...data
+  }: {
+    id: string
+    chargePointVendor?: string
+    chargePointModel?: string
+    chargePointSerialNumber?: string
+    chargeBoxSerialNumber?: string
+    firmwareVersion?: string
+    iccid?: string
+    imsi?: string
+    meterSerialNumber?: string
+    meterType?: string
+    socketId?: string
+    [key: string]: any
+  }): Promise<void> {
+    try {
+      await this.chargerModel.findOneAndUpdate(
+        { id },
+        {
+          $set: {
+            configuration: data,
+            status: 'online',
+            lastHeartbeat: new Date(),
           },
-          status: 'online',
-          lastHeartbeat: new Date(),
+          $setOnInsert: {
+            connectedAt: new Date(),
+          },
         },
-        $setOnInsert: {
-          connectedAt: new Date(),
-        },
-      },
-      { upsert: true, new: true },
-    )
+        { upsert: true, new: true },
+      )
 
-    this.logger.log(`Charger ${data.id} registered (socket: ${data.socketId})`)
+      this.logger.log(
+        `Charger ${id} registered${data.socketId ? ` (socket: ${data.socketId})` : ''}`,
+      )
+    } catch (error) {
+      this.logger.error(
+        `Error adding configurations for charger ${id}: ${error.message}`,
+        error.stack,
+      )
+      throw error
+    }
   }
 
   async unregisterConnection(chargerId: string): Promise<void> {
@@ -109,5 +149,13 @@ export class ChargerService {
   async getSocketId(chargerId: string): Promise<string | undefined> {
     const connection = await this.connectionModel.findOne({ chargerId }).lean()
     return connection?.socketId
+  }
+
+  sendClientMessage(chargerId: string, message: any) {
+    this.wsClient.broadcast({
+      type: 'charger',
+      id: chargerId,
+      message: message,
+    })
   }
 }

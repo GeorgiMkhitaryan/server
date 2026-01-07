@@ -7,18 +7,25 @@ import {
   NotFoundException,
   BadRequestException,
   UseGuards,
+  ParseIntPipe,
 } from '@nestjs/common'
 import { ChargerService } from '../services/charger.service'
+import { ConnectorService } from '../services/connector.service'
 import { TransactionService } from '../services/transaction.service'
 import { OCPPGateway } from '../gateway/ocpp.gateway'
 import { OCPPAction } from '../interfaces/ocpp-message.interface'
 import { AuthGuard } from '../Guards/AuthGuard'
+import {
+  RemoteStartTransactionDto,
+  ResetChargerDto,
+} from '../dto/remote-start-transaction.dto'
 
 @UseGuards(AuthGuard)
 @Controller('chargers')
 export class ChargersController {
   constructor(
     private chargerService: ChargerService,
+    private connectorService: ConnectorService,
     private transactionService: TransactionService,
     private ocppGateway: OCPPGateway,
   ) {}
@@ -40,14 +47,17 @@ export class ChargersController {
   @Get(':chargerId/connectors/:connectorId')
   async getConnector(
     @Param('chargerId') chargerId: string,
-    @Param('connectorId') connectorId: number,
+    @Param('connectorId', ParseIntPipe) connectorId: number,
   ) {
     const charger = await this.chargerService.getCharger(chargerId)
     if (!charger) {
       throw new NotFoundException(`Charger ${chargerId} not found`)
     }
 
-    const connector = charger.connectors
+    const connector = await this.connectorService.getConnector(
+      chargerId,
+      connectorId,
+    )
     if (!connector) {
       throw new NotFoundException(
         `Connector ${connectorId} not found on charger ${chargerId}`,
@@ -60,16 +70,12 @@ export class ChargersController {
   @Post(':chargerId/connectors/:connectorId/start')
   async startTransaction(
     @Param('chargerId') chargerId: string,
-    @Param('connectorId') connectorId: number,
-    @Body() body: { idTag: string; chargingProfile?: any },
+    @Param('connectorId', ParseIntPipe) connectorId: number,
+    @Body() body: RemoteStartTransactionDto,
   ) {
-    const charger = this.chargerService.getCharger(chargerId)
+    const charger = await this.chargerService.getCharger(chargerId)
     if (!charger) {
       throw new NotFoundException(`Charger ${chargerId} not found`)
-    }
-
-    if (!body.idTag) {
-      throw new BadRequestException('idTag is required')
     }
 
     try {
@@ -98,7 +104,7 @@ export class ChargersController {
   @Post(':chargerId/connectors/:connectorId/stop')
   async stopTransaction(
     @Param('chargerId') chargerId: string,
-    @Param('connectorId') connectorId: number,
+    @Param('connectorId', ParseIntPipe) connectorId: number,
   ) {
     const charger = await this.chargerService.getCharger(chargerId)
     if (!charger) {
@@ -139,9 +145,9 @@ export class ChargersController {
   @Post(':chargerId/reset')
   async resetCharger(
     @Param('chargerId') chargerId: string,
-    @Body() body: { type: 'Hard' | 'Soft' },
+    @Body() body: ResetChargerDto,
   ) {
-    const charger = this.chargerService.getCharger(chargerId)
+    const charger = await this.chargerService.getCharger(chargerId)
     if (!charger) {
       throw new NotFoundException(`Charger ${chargerId} not found`)
     }
@@ -168,7 +174,7 @@ export class ChargersController {
   @Post(':chargerId/unlock/:connectorId')
   async unlockConnector(
     @Param('chargerId') chargerId: string,
-    @Param('connectorId') connectorId: number,
+    @Param('connectorId', ParseIntPipe) connectorId: number,
   ) {
     const charger = await this.chargerService.getCharger(chargerId)
     if (!charger) {

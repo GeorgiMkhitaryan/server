@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common'
+import { Module, forwardRef } from '@nestjs/common'
 import { MongooseModule } from '@nestjs/mongoose'
 import { OCPPGateway } from './gateway/ocpp.gateway'
 import { ChargerService } from './services/charger.service'
@@ -20,6 +20,7 @@ import {
   ChargerConnectionSchema,
 } from './schemas/connection.schema'
 import { Connector, ConnectorSchema } from './schemas/connector.schema'
+import { WsModule } from 'src/wsClient/wsClient.module'
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { Connector, ConnectorSchema } from './schemas/connector.schema'
       { name: MeterValue.name, schema: MeterValueSchema },
       { name: ChargerConnection.name, schema: ChargerConnectionSchema },
     ]),
+    forwardRef(() => WsModule),
   ],
   providers: [
     OCPPGateway,

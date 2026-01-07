@@ -4,8 +4,9 @@ import {
   Param,
   NotFoundException,
   Query,
-} from '@nestjs/common';
-import { TransactionService } from '../services/transaction.service';
+  ParseIntPipe,
+} from '@nestjs/common'
+import { TransactionService } from '../services/transaction.service'
 
 @Controller('transactions')
 export class TransactionsController {
@@ -20,7 +21,9 @@ export class TransactionsController {
   }
 
   @Get(':transactionId')
-  async getTransaction(@Param('transactionId') transactionId: number) {
+  async getTransaction(
+    @Param('transactionId', ParseIntPipe) transactionId: number,
+  ) {
     const transaction = await this.transactionService.getTransaction(transactionId)
     if (!transaction) {
       throw new NotFoundException(`Transaction ${transactionId} not found`)

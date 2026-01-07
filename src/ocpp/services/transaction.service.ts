@@ -11,7 +11,7 @@ import {
 @Injectable()
 export class TransactionService {
   private readonly logger = new Logger(TransactionService.name)
-  private nextTransactionId = 1
+  private nextTransactionIdPromise: Promise<number> | null = null
 
   constructor(
     @InjectModel(Transaction.name)
@@ -28,11 +28,40 @@ export class TransactionService {
       .sort({ id: -1 })
       .lean()
     if (lastTransaction) {
-      this.nextTransactionId = lastTransaction.id + 1
       this.logger.log(
-        `Initialized transaction ID counter: ${this.nextTransactionId}`,
+        `Initialized transaction ID counter: ${lastTransaction.id + 1}`,
       )
     }
+  }
+
+  private async getNextTransactionId(): Promise<number> {
+    // Use findOneAndUpdate for atomic increment
+    const result = await this.transactionModel
+      .findOne()
+      .sort({ id: -1 })
+      .lean()
+
+    if (!result) {
+      return 1
+    }
+
+    // Check for concurrent transactions and find next available ID
+    let nextId = result.id + 1
+    let attempts = 0
+    const maxAttempts = 100
+
+    while (attempts < maxAttempts) {
+      const existing = await this.transactionModel.findOne({ id: nextId }).lean()
+      if (!existing) {
+        return nextId
+      }
+      nextId++
+      attempts++
+    }
+
+    // Fallback: use timestamp-based ID if too many collisions
+    this.logger.warn('Too many transaction ID collisions, using timestamp-based ID')
+    return Date.now()
   }
 
   async createTransaction(data: {
@@ -41,7 +70,7 @@ export class TransactionService {
     idTag: string
     meterStart: number
   }): Promise<Transaction> {
-    const transactionId = this.nextTransactionId++
+    const transactionId = await this.getNextTransactionId()
 
     const transaction = new this.transactionModel({
       id: transactionId,

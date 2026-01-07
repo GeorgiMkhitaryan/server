@@ -59,19 +59,27 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
   initializeWebSocketServer(httpServer: Server) {
     try {
       this.wss = new WebSocket.Server({
-        server: httpServer,
+        noServer: true,
         perMessageDeflate: false,
         clientTracking: true,
-        verifyClient: (info) => {
-          // Only accept connections to /ocpp paths
-          const url = info.req.url || ''
-          if (url.startsWith('/ocpp')) {
-            this.logger.debug(`Accepting WebSocket connection: ${url}`)
-            return true
-          }
-          this.logger.warn(`Rejecting WebSocket connection to: ${url}`)
-          return false
-        },
+      })
+
+      httpServer.on('upgrade', (request: any, socket: any, head: Buffer) => {
+        const url = request.url || ''
+        // Only handle /ocpp path
+        if (url.startsWith('/ocpp')) {
+          this.logger.debug(`Handling OCPP WebSocket upgrade: ${url}`)
+
+          this.wss!.handleUpgrade(
+            request,
+            socket,
+            head,
+            (ws: WebSocket.WebSocket) => {
+              this.wss!.emit('connection', ws, request)
+            },
+          )
+        }
+        // Let other WebSocket servers handle their paths
       })
 
       this.wss.on('connection', this.handleConnection.bind(this))
@@ -94,8 +102,6 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
       )
       throw error
     }
-
-    // Set up ping/pong to keep connections alive
     this.pingInterval = setInterval(() => {
       this.chargerSockets.forEach((ws, chargerId) => {
         const ocppWs = ws as OCPPWebSocket
@@ -513,11 +519,15 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
     payload: StatusNotificationRequestDto,
     client: OCPPWebSocket,
   ) {
-    console.log(payload, 'handleStatusNotification')
-    this.connectorService.addConnector(chargerId, payload)
-
+    this.logger.debug(
+      `StatusNotification received from charger ${chargerId}: ${JSON.stringify(payload)}`,
+    )
+    await this.connectorService.addConnector(chargerId, payload)
+    this.chargerService.sendClientMessage(chargerId, {
+      type: 'status-notification',
+      payload,
+    })
     try {
-      // StatusNotification has empty response
       this.sendCallResult(client, messageId, {})
     } catch (error) {
       this.logger.error(
@@ -631,19 +641,23 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private handleCallResult(messageId: string, payload: any) {
+  private handleCallResult(messageId: string, payload: Record<string, any>) {
     const callback = this.pendingCallbacks.get(messageId)
     if (callback) {
       callback(payload)
       this.pendingCallbacks.delete(messageId)
+    } else {
+      this.logger.warn(`No callback found for message ID: ${messageId}`)
     }
   }
 
-  private handleCallError(messageId: string, payload: any) {
+  private handleCallError(messageId: string, payload: Record<string, any>) {
     const callback = this.pendingCallbacks.get(messageId)
     if (callback) {
       callback({ error: payload })
       this.pendingCallbacks.delete(messageId)
+    } else {
+      this.logger.warn(`No callback found for error message ID: ${messageId}`)
     }
   }
 
@@ -651,7 +665,8 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
   sendCommand(
     chargerId: string,
     action: OCPPAction,
-    payload: any,
+    payload: Record<string, any>,
+    timeout: number = 30000, // 30 seconds default timeout
   ): Promise<any> {
     return new Promise((resolve, reject) => {
       const client = this.chargerSockets.get(chargerId)
@@ -663,7 +678,18 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
       const messageId = uuidv4()
       const message = [OCPPMessageType.CALL, messageId, action, payload]
 
+      // Set up timeout
+      const timeoutId = setTimeout(() => {
+        this.pendingCallbacks.delete(messageId)
+        reject(
+          new Error(
+            `Command ${action} to charger ${chargerId} timed out after ${timeout}ms`,
+          ),
+        )
+      }, timeout)
+
       this.pendingCallbacks.set(messageId, (response) => {
+        clearTimeout(timeoutId)
         if (response.error) {
           reject(response.error)
         } else {
@@ -675,6 +701,7 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
         client.send(JSON.stringify(message))
         this.logger.debug(`Sent ${action} command to charger ${chargerId}`)
       } catch (error) {
+        clearTimeout(timeoutId)
         this.pendingCallbacks.delete(messageId)
         reject(error)
       }

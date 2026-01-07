@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
-import { Types } from 'mongoose'
+import { Document, Types } from 'mongoose'
 import { ConnectorStatus, OCPPErrorCode } from '../dto/status-notification.dto'
 
 export type ConnectorDocument = Connector & Document
@@ -14,7 +14,7 @@ export class Connector {
   })
   chargerId: Types.ObjectId
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, index: true })
   connectorId: number
 
   @Prop({ required: true, enum: Object.values(ConnectorStatus) })
