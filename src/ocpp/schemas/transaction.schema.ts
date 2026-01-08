@@ -20,7 +20,7 @@ const SampledValueSchema = SchemaFactory.createForClass(SampledValue)
 
 @Schema({ timestamps: true })
 export class MeterValue {
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   transactionId: number
 
   @Prop({ required: true })
@@ -39,13 +39,13 @@ export type MeterValueDocument = MeterValue & Document
 
 @Schema({ timestamps: true })
 export class Transaction {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   id: number
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   chargerId: string
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   connectorId: number
 
   @Prop({ required: true })
@@ -84,7 +84,6 @@ export class Transaction {
     required: true,
     enum: ['active', 'completed', 'stopped'],
     default: 'active',
-    index: true,
   })
   status: 'active' | 'completed' | 'stopped'
 
@@ -97,9 +96,9 @@ export const TransactionSchema = SchemaFactory.createForClass(Transaction)
 export type TransactionDocument = Transaction & Document
 
 // Indexes for performance
+// Note: 'id' field has unique: true, so index is created automatically
 TransactionSchema.index({ chargerId: 1, connectorId: 1, status: 1 })
 TransactionSchema.index({ chargerId: 1, status: 1 })
-TransactionSchema.index({ id: 1 })
 TransactionSchema.index({ startTime: -1 })
 
 // Indexes for MeterValue

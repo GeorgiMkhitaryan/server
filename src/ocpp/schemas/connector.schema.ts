@@ -10,11 +10,10 @@ export class Connector {
     type: Types.ObjectId,
     ref: 'Charger',
     required: true,
-    index: true,
   })
   chargerId: Types.ObjectId
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   connectorId: number
 
   @Prop({ required: true, enum: Object.values(ConnectorStatus) })

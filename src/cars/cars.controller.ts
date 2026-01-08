@@ -29,11 +29,9 @@ import { Brand } from './schemas/brand.schema'
 import { Car } from './schemas/car.schema'
 
 @ApiTags('cars')
-@Controller()
+@Controller('cars')
 export class CarsController {
   constructor(private readonly carsService: CarsService) {}
-
-  // Brand endpoints
   @Post('brands')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new brand' })
@@ -42,7 +40,9 @@ export class CarsController {
     description: 'Brand successfully created',
     type: Brand,
   })
-  @ApiBadRequestResponse({ description: 'Invalid input or brand already exists' })
+  @ApiBadRequestResponse({
+    description: 'Invalid input or brand already exists',
+  })
   async createBrand(@Body() createBrandDto: CreateBrandDto): Promise<Brand> {
     return this.carsService.createBrand(createBrandDto)
   }
@@ -59,7 +59,11 @@ export class CarsController {
 
   @Get('brands/:id')
   @ApiOperation({ summary: 'Get brand by ID' })
-  @ApiParam({ name: 'id', description: 'Brand ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({
+    name: 'id',
+    description: 'Brand ID',
+    example: '507f1f77bcf86cd799439011',
+  })
   @ApiOkResponse({ description: 'Brand found', type: Brand })
   @ApiNotFoundResponse({ description: 'Brand not found' })
   @ApiBadRequestResponse({ description: 'Invalid brand ID' })
@@ -69,11 +73,17 @@ export class CarsController {
 
   @Patch('brands/:id')
   @ApiOperation({ summary: 'Update brand' })
-  @ApiParam({ name: 'id', description: 'Brand ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({
+    name: 'id',
+    description: 'Brand ID',
+    example: '507f1f77bcf86cd799439011',
+  })
   @ApiBody({ type: UpdateBrandDto })
   @ApiOkResponse({ description: 'Brand successfully updated', type: Brand })
   @ApiNotFoundResponse({ description: 'Brand not found' })
-  @ApiBadRequestResponse({ description: 'Invalid input or brand name already exists' })
+  @ApiBadRequestResponse({
+    description: 'Invalid input or brand name already exists',
+  })
   async updateBrand(
     @Param('id') id: string,
     @Body() updateBrandDto: UpdateBrandDto,
@@ -84,10 +94,16 @@ export class CarsController {
   @Delete('brands/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete brand' })
-  @ApiParam({ name: 'id', description: 'Brand ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({
+    name: 'id',
+    description: 'Brand ID',
+    example: '507f1f77bcf86cd799439011',
+  })
   @ApiNoContentResponse({ description: 'Brand successfully deleted' })
   @ApiNotFoundResponse({ description: 'Brand not found' })
-  @ApiBadRequestResponse({ description: 'Invalid brand ID or brand has associated cars' })
+  @ApiBadRequestResponse({
+    description: 'Invalid brand ID or brand has associated cars',
+  })
   async deleteBrand(@Param('id') id: string): Promise<void> {
     return this.carsService.deleteBrand(id)
   }
@@ -118,7 +134,11 @@ export class CarsController {
 
   @Get('cars/:id')
   @ApiOperation({ summary: 'Get car by ID' })
-  @ApiParam({ name: 'id', description: 'Car ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({
+    name: 'id',
+    description: 'Car ID',
+    example: '507f1f77bcf86cd799439011',
+  })
   @ApiOkResponse({ description: 'Car found', type: Car })
   @ApiNotFoundResponse({ description: 'Car not found' })
   @ApiBadRequestResponse({ description: 'Invalid car ID' })
@@ -145,19 +165,30 @@ export class CarsController {
 
   @Patch('cars/:id')
   @ApiOperation({ summary: 'Update car' })
-  @ApiParam({ name: 'id', description: 'Car ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({
+    name: 'id',
+    description: 'Car ID',
+    example: '507f1f77bcf86cd799439011',
+  })
   @ApiBody({ type: UpdateCarDto })
   @ApiOkResponse({ description: 'Car successfully updated', type: Car })
   @ApiNotFoundResponse({ description: 'Car or brand not found' })
   @ApiBadRequestResponse({ description: 'Invalid input' })
-  async updateCar(@Param('id') id: string, @Body() updateCarDto: UpdateCarDto): Promise<Car> {
+  async updateCar(
+    @Param('id') id: string,
+    @Body() updateCarDto: UpdateCarDto,
+  ): Promise<Car> {
     return this.carsService.updateCar(id, updateCarDto)
   }
 
   @Delete('cars/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete car' })
-  @ApiParam({ name: 'id', description: 'Car ID', example: '507f1f77bcf86cd799439011' })
+  @ApiParam({
+    name: 'id',
+    description: 'Car ID',
+    example: '507f1f77bcf86cd799439011',
+  })
   @ApiNoContentResponse({ description: 'Car successfully deleted' })
   @ApiNotFoundResponse({ description: 'Car not found' })
   @ApiBadRequestResponse({ description: 'Invalid car ID' })

@@ -4,9 +4,9 @@ import { Document, Types } from 'mongoose'
 export type ChargerDocument = Charger & Document
 @Schema({ timestamps: true })
 export class Charger {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   id: string
-  
+
   @Prop({ required: true, enum: ['online', 'offline'], default: 'offline' })
   status: 'online' | 'offline'
 
@@ -30,9 +30,8 @@ export class Charger {
   }
 }
 
-
 export const ChargerSchema = SchemaFactory.createForClass(Charger)
 
-ChargerSchema.index({ id: 1 })
+// Note: 'id' field has unique: true, so index is created automatically
 ChargerSchema.index({ status: 1 })
 ChargerSchema.index({ lastHeartbeat: 1 })

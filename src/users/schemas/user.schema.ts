@@ -1,14 +1,16 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
-import { Document } from 'mongoose'
+import { Document, Types } from 'mongoose'
+import { Brand } from 'src/cars/schemas/brand.schema'
+import { Car } from 'src/cars/schemas/car.schema'
 
 export type UserDocument = User & Document
 
 @Schema({ timestamps: true })
 export class User {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   email: string
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   phone: string
 
   @Prop({ required: true })
@@ -31,10 +33,18 @@ export class User {
 
   @Prop()
   refreshToken?: string
+
+  @Prop({ type: Types.ObjectId, ref: Brand.name, required: true })
+  carBrandId: Types.ObjectId
+
+  @Prop({ type: Types.ObjectId, ref: Car.name, required: true })
+  carModelId: Types.ObjectId
+
+  @Prop({ default: true })
+  terms_agreement: boolean
 }
 
 export const UserSchema = SchemaFactory.createForClass(User)
 
-UserSchema.index({ email: 1 })
-UserSchema.index({ phone: 1 })
+// Note: 'email' and 'phone' fields have unique: true, so indexes are created automatically
 UserSchema.index({ isActive: 1 })

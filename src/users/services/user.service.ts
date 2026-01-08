@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { JwtService } from '@nestjs/jwt'
-import { Model } from 'mongoose'
+import { Model, Types } from 'mongoose'
 import { User, UserDocument } from '../schemas/user.schema'
 import {
   RegisterUserDto,
@@ -40,7 +40,7 @@ export class UserService {
 
   async register(registerDto: RegisterUserDto): Promise<UserResponseDto> {
     const existingUser = await this.userModel.findOne({
-      phone: registerDto.phone.toLowerCase(),
+      phone: registerDto.phone,
     })
 
     if (existingUser) {
@@ -58,6 +58,8 @@ export class UserService {
       firstName: registerDto.firstName,
       lastName: registerDto.lastName,
       phone: registerDto.phone,
+      carBrandId: new Types.ObjectId(registerDto.carBrandId),
+      carModelId: new Types.ObjectId(registerDto.carModelId),
       isActive: true,
       role: 'user',
     })
@@ -70,7 +72,7 @@ export class UserService {
 
   async login(phone: string, password: string): Promise<LoginResponseDto> {
     const user = await this.userModel.findOne({
-      phone: phone.toLowerCase(),
+      phone: phone,
     })
 
     if (!user) {
@@ -100,7 +102,6 @@ export class UserService {
     return {
       user: this.toUserResponseDto(user),
       accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
     }
   }
 
@@ -204,22 +205,18 @@ export class UserService {
   }
 
   async getUserById(id: string): Promise<UserResponseDto> {
-    const user = await this.userModel.findById(id).lean()
-
-    if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`)
+    if (!id || id.trim() === '') {
+      throw new BadRequestException('User ID is required')
     }
-
-    return this.toUserResponseDto(user)
-  }
-
-  async getUserByEmail(email: string): Promise<UserResponseDto> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(`Invalid user ID format: ${id}`)
+    }
     const user = await this.userModel
-      .findOne({ email: email.toLowerCase() })
+      .findOne({ _id: new Types.ObjectId(id) })
       .lean()
 
     if (!user) {
-      throw new NotFoundException(`User with email ${email} not found`)
+      throw new NotFoundException(`User with ID ${id} not found`)
     }
 
     return this.toUserResponseDto(user)

@@ -16,7 +16,7 @@ export class CreateCarDto {
   })
   @IsString()
   @IsNotEmpty()
-  model: string
+  name: string
 
   @ApiProperty({
     description: 'Manufacturing year',

@@ -4,7 +4,8 @@ import {
   IsOptional,
   MinLength,
   IsBoolean,
-  isString,
+  IsMongoId,
+  IsNotEmpty,
 } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
@@ -71,6 +72,30 @@ export class RegisterUserDto {
   @IsOptional()
   @IsString()
   phone?: string
+
+  @ApiProperty({
+    description: 'Car Brand ID',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @IsMongoId()
+  @IsNotEmpty()
+  carBrandId: string
+
+  @ApiProperty({
+    description: 'Car Model ID',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @IsMongoId()
+  @IsNotEmpty()
+  carModelId: string
+
+  @ApiProperty({
+    description: 'Terms Agreement',
+    example: true,
+  })
+  @IsBoolean()
+  @IsNotEmpty()
+  terms_agreement: boolean
 }
 
 export class LoginUserDto {
@@ -235,13 +260,6 @@ export class LoginResponseDto {
     type: String,
   })
   accessToken: string
-
-  @ApiProperty({
-    description: 'JWT refresh token',
-    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-    type: String,
-  })
-  refreshToken: string
 }
 
 export class RefreshTokenResponseDto {

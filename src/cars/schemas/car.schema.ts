@@ -6,11 +6,11 @@ export type CarDocument = Car & Document
 
 @Schema({ timestamps: true })
 export class Car {
-  @Prop({ type: Types.ObjectId, ref: Brand.name, required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: Brand.name, required: true })
   brand: Types.ObjectId
 
   @Prop({ required: true })
-  model: string
+  name: string
 
   @Prop({ required: true })
   year: number

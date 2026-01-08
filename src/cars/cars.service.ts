@@ -134,13 +134,13 @@ export class CarsService {
 
     const car = new this.carModel({
       brand: new Types.ObjectId(createCarDto.brand),
-      model: createCarDto.model,
+      name: createCarDto.name,
       year: createCarDto.year,
       engine: createCarDto.engine,
     })
 
     await car.save()
-    this.logger.log(`Car created: ${brand.name} ${createCarDto.model}`)
+    this.logger.log(`Car created: ${brand.name} ${createCarDto.name}`)
     return car.toObject()
   }
 

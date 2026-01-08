@@ -1,3 +1,4 @@
+require('dotenv').config()
 import { NestFactory } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
@@ -10,7 +11,7 @@ async function bootstrap() {
 
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
-    : ['http://localhost:3000', 'http://localhost:5173'] // Default dev origins
+    : ['http://localhost:3000', 'http://localhost:5173']
 
   const isDevelopment = process.env.NODE_ENV !== 'production'
 
@@ -89,7 +90,6 @@ async function bootstrap() {
   const PORT = process.env.PORT || 3000
   const HOST = process.env.HOST || '0.0.0.0'
   const DOMAIN = process.env.DOMAIN || 'localhost'
-
   const httpServer = app.getHttpServer()
 
   const ocppGateway = app.get(OCPPGateway)

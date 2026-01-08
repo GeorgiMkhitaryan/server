@@ -5,7 +5,7 @@ export type BrandDocument = Brand & Document
 
 @Schema({ timestamps: true })
 export class Brand {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   name: string
 
   @Prop()
@@ -14,4 +14,4 @@ export class Brand {
 
 export const BrandSchema = SchemaFactory.createForClass(Brand)
 
-BrandSchema.index({ name: 1 })
+// Note: 'name' field has unique: true, so index is created automatically

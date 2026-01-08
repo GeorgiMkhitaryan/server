@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt'
 import { UserService } from '../services/user.service'
 import { TokenBlacklistService } from '../services/token-blacklist.service'
 import { TokenPayload } from '../dto/auth.dto'
+import { JWT_SECRET } from '../constants/jwt.constants'
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -16,9 +17,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey:
-        process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-      passReqToCallback: true, // Enable access to request object
+      secretOrKey: JWT_SECRET,
+      passReqToCallback: true,
     })
   }
 

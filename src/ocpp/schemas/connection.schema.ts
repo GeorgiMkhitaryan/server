@@ -5,7 +5,7 @@ export type ChargerConnectionDocument = ChargerConnection & Document
 
 @Schema({ timestamps: true })
 export class ChargerConnection {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   chargerId: string
 
   @Prop({ required: true })
@@ -25,6 +25,6 @@ export const ChargerConnectionSchema =
   SchemaFactory.createForClass(ChargerConnection)
 
 // Indexes
-ChargerConnectionSchema.index({ chargerId: 1 })
+// Note: 'chargerId' field has unique: true, so index is created automatically
 ChargerConnectionSchema.index({ connectedAt: -1 })
 

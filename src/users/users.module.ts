@@ -8,15 +8,16 @@ import { TokenBlacklistService } from './services/token-blacklist.service'
 import { UsersController } from './controllers/users.controller'
 import { JwtStrategy } from './strategies/jwt.strategy'
 import { JwtAuthGuard } from './guards/jwt-auth.guard'
+import { JWT_SECRET, JWT_ACCESS_TOKEN_EXPIRY } from './constants/jwt.constants'
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+      secret: JWT_SECRET,
       signOptions: {
-        expiresIn: '15m',
+        expiresIn: JWT_ACCESS_TOKEN_EXPIRY,
       },
     }),
   ],
