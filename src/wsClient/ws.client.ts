@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common'
 import * as WebSocket from 'ws'
 import { Server } from 'http'
-import { ChargerService } from 'src/ocpp/services/charger.service'
+import { MarkersService } from 'src/markers/markers.service'
 
 type ClientState = {
   id: string
@@ -18,8 +18,8 @@ type ClientState = {
 @Injectable()
 export class WsClientGateway implements OnModuleDestroy {
   constructor(
-    @Inject(forwardRef(() => ChargerService))
-    private chargerService: ChargerService,
+    @Inject(forwardRef(() => MarkersService))
+    private markersService: MarkersService,
   ) {}
   private wss: WebSocket.Server | null = null
   private readonly logger = new Logger(WsClientGateway.name)
@@ -83,13 +83,12 @@ export class WsClientGateway implements OnModuleDestroy {
         connectedAt: Date.now(),
       })
 
-      const chargers = await this.chargerService.getAllChargers()
-
+      const markers = await this.markersService.findAll()
       ws.send(
         JSON.stringify({
-          type: 'connected',
+          message: 'initState',
           id,
-          chargers: chargers,
+          payload: markers,
         }),
       )
 

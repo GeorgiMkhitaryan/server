@@ -21,6 +21,7 @@ import {
 } from './schemas/connection.schema'
 import { Connector, ConnectorSchema } from './schemas/connector.schema'
 import { WsModule } from 'src/wsClient/wsClient.module'
+import { ConnectorController } from './controllers/connector.controller'
 
 @Module({
   imports: [
@@ -40,7 +41,7 @@ import { WsModule } from 'src/wsClient/wsClient.module'
     TransactionService,
     AuthService,
   ],
-  controllers: [ChargersController, TransactionsController, HealthController],
+  controllers: [ChargersController, TransactionsController, HealthController, ConnectorController],
   exports: [
     OCPPGateway,
     ChargerService,

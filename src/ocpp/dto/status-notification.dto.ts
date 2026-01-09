@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional } from 'class-validator';
+import { IsString, IsNumber, IsOptional } from 'class-validator'
 
 export enum ConnectorStatus {
   Available = 'Available',
@@ -33,32 +33,51 @@ export enum OCPPErrorCode {
 
 export class StatusNotificationRequestDto {
   @IsNumber()
-  connectorId: number;
+  connectorId: number
 
   @IsString()
-  errorCode: OCPPErrorCode;
+  errorCode: OCPPErrorCode
 
   @IsString()
-  status: ConnectorStatus;
-
-  @IsOptional()
-  @IsString()
-  info?: string;
+  status: ConnectorStatus
 
   @IsOptional()
   @IsString()
-  timestamp?: string;
+  info?: string
 
   @IsOptional()
   @IsString()
-  vendorId?: string;
+  timestamp?: string
 
   @IsOptional()
   @IsString()
-  vendorErrorCode?: string;
+  vendorId?: string
+
+  @IsOptional()
+  @IsString()
+  vendorErrorCode?: string
 }
 
 export class StatusNotificationResponseDto {
   // Empty response for StatusNotification
 }
 
+export class ConnectorUpdateRequestDto {
+  @IsString()
+  connectorId: string
+  @IsOptional()
+  @IsString()
+  name: string
+  @IsOptional()
+  @IsNumber()
+  power: number
+  @IsNumber()
+  @IsOptional()
+  current: number
+  @IsNumber()
+  @IsOptional()
+  voltage: number
+  @IsOptional()
+  @IsNumber()
+  energy: number
+}

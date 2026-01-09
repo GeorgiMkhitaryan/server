@@ -151,11 +151,10 @@ export class ChargerService {
     return connection?.socketId
   }
 
-  sendClientMessage(chargerId: string, message: any) {
+  sendClientMessage( payload: any) {
     this.wsClient.broadcast({
-      type: 'charger',
-      id: chargerId,
-      message: message,
+      message: 'connector',
+      payload: payload,
     })
   }
 }

@@ -46,5 +46,4 @@ export class User {
 
 export const UserSchema = SchemaFactory.createForClass(User)
 
-// Note: 'email' and 'phone' fields have unique: true, so indexes are created automatically
 UserSchema.index({ isActive: 1 })

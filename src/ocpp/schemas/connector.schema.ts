@@ -24,6 +24,14 @@ export class Connector {
 
   @Prop()
   lastStatusUpdate?: Date
+  @Prop()
+  power: number
+  @Prop()
+  current: number
+  @Prop()
+  voltage: number
+  @Prop()
+  energy: number
 }
 
 export const ConnectorSchema = SchemaFactory.createForClass(Connector)

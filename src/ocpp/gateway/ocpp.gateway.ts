@@ -522,10 +522,10 @@ export class OCPPGateway implements OnModuleInit, OnModuleDestroy {
     this.logger.debug(
       `StatusNotification received from charger ${chargerId}: ${JSON.stringify(payload)}`,
     )
-    await this.connectorService.addConnector(chargerId, payload)
-    this.chargerService.sendClientMessage(chargerId, {
-      type: 'status-notification',
-      payload,
+    const _id = await this.connectorService.addConnector(chargerId, payload)
+    this.chargerService.sendClientMessage({
+      ...payload,
+      chargerId: _id,
     })
     try {
       this.sendCallResult(client, messageId, {})

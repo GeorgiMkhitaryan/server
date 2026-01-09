@@ -59,6 +59,7 @@ async function bootstrap() {
     .addTag('transactions', 'Transaction management endpoints')
     .addTag('health', 'Health check endpoints')
     .addTag('cars', 'Car and brand management endpoints')
+    .addTag('markers', 'Marker management endpoints')
     .addApiKey(
       {
         type: 'apiKey',

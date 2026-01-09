@@ -6,6 +6,7 @@ import { OCPPModule } from './ocpp/ocpp.module'
 import { WsModule } from './wsClient/wsClient.module'
 import { UsersModule } from './users/users.module'
 import { CarsModule } from './cars/cars.module'
+import { MarkersModule } from './markers/markers.module'
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { CarsModule } from './cars/cars.module'
     WsModule,
     UsersModule,
     CarsModule,
+    MarkersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
