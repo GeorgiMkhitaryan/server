@@ -73,7 +73,7 @@ export class WsClientGateway implements OnModuleDestroy {
     try {
       const url = req.url || ''
       const parsedUrl = new URL(url, 'http://localhost')
-      const id = parsedUrl.searchParams.get('id') || crypto.randomUUID()
+      const id = parsedUrl.searchParams.get('id') || Date.now().toString()
 
       this.logger.log(`Client connected: ${id}`)
 
